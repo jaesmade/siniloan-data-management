@@ -5,40 +5,24 @@ import { CaretDown, IdentificationCard, SpinnerGap, Trash, X } from "@phosphor-i
 import { createClient } from "@/lib/supabase/client";
 
 type Row = { id: string; [key: string]: unknown };
-type Database = "jobseekers" | "research" | "biometrics";
+type Database = "research" | "tupad";
 type Entry = [string, unknown];
 
 const names: Record<Database, string> = {
-  jobseekers: "Jobseeker Registry",
-  research: "Research & Data Requests",
-  biometrics: "Biometrics Data",
+  research: "Data & Interview Requests",
+  tupad: "TUPAD Beneficiaries",
 };
-const derivedJobseekerFields = new Set(["name", "employment_status", "preferred_occupation"]);
 const systemFields = new Set(["id", "department_id", "subject_id", "location_id", "import_job_id", "source_row_number", "created_by", "updated_by", "version", "archived_at", "created_at", "updated_at"]);
 const primaryOrder: Record<Database, string[]> = {
-  jobseekers: ["first_name", "middle_name", "surname", "suffix", "birth_date", "sex", "email", "mobile_number", "source_person_id"],
   research: ["control_number", "requester_name", "institution_office", "research_title_purpose", "category", "date_received", "submitted_at", "status", "assigned_to", "decision_notes"],
-  biometrics: ["person_name", "personnel_number", "occurred_at", "attendance_status", "external_location_id", "employment_id_number", "workcode", "verify_code", "card_number"],
+  tupad: ["source_number", "full_name", "first_name", "middle_name", "last_name", "extension_name", "birth_date", "age", "sex", "civil_status", "barangay", "city_municipality", "province", "district", "id_type", "id_number", "contact_number", "bank_account_number", "beneficiary_type", "occupation", "average_monthly_income", "dependent", "interested_in_skills_training", "skills_training_needed", "remarks", "source_sheet"],
 };
 const sourceLabels: Record<string, string> = {
   institution_office: "Institution / office",
   research_title_purpose: "Research title / purpose",
   submitted_at: "Submitted at",
   date_received: "Date received",
-  external_location_id: "Location ID",
-  employment_id_number: "Employment ID number",
-  verify_code: "Verify code",
-  "PREFERRED CCUPATION/S": "Preferred occupation(s)",
-  "PREFERRED OCCUPATION/S": "Preferred occupation(s)",
-  "EMPLOYEMENT TYPE": "Employment type",
-  "REASON FOR UNEMPLOYEMENT": "Reason for unemployment",
-  "ARE YOU A 4P's BENEFICIARY?": "4Ps beneficiary",
-  "IF YES, PLEASE PROVIDE HOUSEHOLD ID NO.": "4Ps household ID",
-  "ARE YOU CURRENTLY ENROLLED IN SCHOOL?": "Currently enrolled in school",
-  "SPECIFY COUNTRY": "Current OFW country",
-  "HOUSE NO./ STREET VILLAGE": "House number / street / village",
-  "TIN NUMBER": "TIN number",
-  "HEIGHT (FT.)": "Height (ft.)",
+
 };
 
 function label(key: string) {
@@ -79,16 +63,6 @@ function DetailSection({ title, entries, showEmpty }: { title: string; entries: 
   return <section className="record-detail-section"><div className="record-detail-section-heading"><h3>{title}</h3><span>{filled} {filled === 1 ? "field" : "fields"}</span></div><Fields entries={entries} showEmpty={showEmpty} /></section>;
 }
 
-function metadataSection(key: string): string {
-  const value = key.toUpperCase();
-  if (/COMPANY|POSITION|NUMBER OF MONTHS|^STATUS [1-5]$/.test(value)) return "Work experience";
-  if (/EMPLOY|OCCUPATION|LOOKING FOR WORK|4P|OFW|PREFERRED|LANGUAGE|ENROLLED|COUNTRY|DEPLOYMENT|HOUSEHOLD/.test(value)) return "Employment and preferences";
-  if (/CIVIL STATUS|RELIGION|HEIGHT|HOUSE|STREET|BARANGAY|MUNICIPALITY|PROVINCE|TIN NUMBER|DISABILITY/.test(value)) return "Address and profile";
-  if (/SCHOOL|GRADUATED|STRAND|COURSE\/PROGRAM|EDUCATIONAL/.test(value)) return "Education";
-  if (/TRAINING|ELIGIBILITY|LICENSE|CERTIFICATE|SKILLS/.test(value)) return "Training and credentials";
-  return "Other form and import fields";
-}
-
 export function RecordDetailModal({ database, record, onClose, onEdit, canDelete=false, onDeleted }: { database: Database; record: Row; onClose: () => void; onEdit?: () => void; canDelete?:boolean; onDeleted?:()=>void }) {
   const [confirmDelete,setConfirmDelete]=useState(false);
   const [deleting,setDeleting]=useState(false);
@@ -113,15 +87,13 @@ export function RecordDetailModal({ database, record, onClose, onEdit, canDelete
     return () => { document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", keydown); previousFocus?.focus(); };
   }, [onClose]);
 
-  const primary = ordered(Object.entries(record).filter(([key]) => !systemFields.has(key) && key !== "metadata" && key !== "raw_source" && !(database === "jobseekers" && derivedJobseekerFields.has(key))), primaryOrder[database]);
+  const primary = ordered(Object.entries(record).filter(([key]) => !systemFields.has(key) && key !== "metadata" && key !== "raw_source"), primaryOrder[database]);
   const metadata = record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata) ? Object.entries(record.metadata) : [];
   const source = record.raw_source && typeof record.raw_source === "object" && !Array.isArray(record.raw_source) ? Object.entries(record.raw_source) : [];
   const system = Object.entries(record).filter(([key]) => systemFields.has(key));
-  const metadataGroups = database === "jobseekers"
-    ? ["Address and profile", "Employment and preferences", "Education", "Training and credentials", "Work experience", "Other form and import fields"].map(title => ({ title, entries: ordered(metadata.filter(([key]) => metadataSection(key) === title)) }))
-    : [{ title: "Additional form and import fields", entries: ordered(metadata) }];
-  const title = database === "jobseekers" ? [record.first_name, record.middle_name, record.surname, record.suffix].filter(Boolean).join(" ") : database === "research" ? String(record.requester_name || "Research request") : String(record.person_name || "Device event");
-  const status = database === "jobseekers" ? (record.metadata as Record<string, unknown> | undefined)?.["EMPLOYMENT STATUS"] : database === "research" ? record.status : record.attendance_status;
+  const metadataGroups = [{ title: "Additional form and import fields", entries: ordered(metadata) }];
+  const title = String(database==="tupad" ? record.full_name || [record.first_name,record.middle_name,record.last_name,record.extension_name].filter(Boolean).join(" ") || "Beneficiary" : record.requester_name || "Request");
+  const status = database==="tupad" ? record.beneficiary_type : record.status;
   const filledCount = [...primary, ...metadata, ...source].filter(([, value]) => !isEmpty(value)).length;
   const deleteRecord=async()=>{setDeleting(true);setDeleteError("");const {error}=await createClient().schema("core").rpc("delete_record",{p_module:database,p_record_id:record.id});if(error){setDeleteError(error.message);setDeleting(false);return;}onDeleted?.();onClose();};
 

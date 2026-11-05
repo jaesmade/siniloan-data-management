@@ -25,7 +25,7 @@ const supabase = createClient(supabaseUrl, publishableKey, {
 
 async function query(overrides = {}) {
   const parameters = {
-    p_module: "jobseekers", p_search: "", p_status: "", p_secondary: "",
+    p_module: "research", p_search: "", p_status: "", p_secondary: "",
     p_from: null, p_to: null, p_sort: "created_at", p_desc: true, p_page: 1, p_size: 25,
     ...overrides,
   };
@@ -36,12 +36,12 @@ async function query(overrides = {}) {
 
 const first = await query();
 const second = await query({ p_page: 2 });
-assert(first.total > 25, "Expected enough jobseeker records to test a second page.");
+assert(first.total > 25, "Expected enough request records to test a second page.");
 assert.equal(first.rows.length, 25);
-assert.equal(second.rows.length, 25);
-assert.equal(new Set([...first.rows, ...second.rows].map((row) => row.id)).size, 50, "Pages overlap.");
+assert.equal(second.rows.length, Math.min(25, first.total - 25));
+assert.equal(new Set([...first.rows, ...second.rows].map((row) => row.id)).size, first.rows.length + second.rows.length, "Pages overlap.");
 
-const last = await query({ p_page: 999 });
+const last = await query({ p_page: Math.ceil(first.total / 25) + 1 });
 assert.equal(last.page, Math.ceil(last.total / 25), "Out-of-range page was not clamped.");
 assert(last.rows.length > 0 && last.rows.length <= 25);
 
@@ -55,12 +55,12 @@ assert.deepEqual(
 );
 
 const status = first.statuses[0];
-assert(status, "Expected a jobseeker status filter option.");
+assert(status, "Expected a request status filter option.");
 const filtered = await query({ p_status: status });
 assert(filtered.total > 0 && filtered.total <= first.total);
-assert(filtered.rows.every((row) => row.metadata?.["EMPLOYMENT STATUS"] === status));
+assert(filtered.rows.every((row) => row.status === status));
 
-const searchedName = String(first.rows[0].surname);
+const searchedName = String(first.rows[0].requester_name);
 const searched = await query({ p_search: searchedName });
 assert(searched.total > 0);
 assert(searched.rows.every((row) => JSON.stringify(row).toLowerCase().includes(searchedName.toLowerCase())));
@@ -72,21 +72,10 @@ assert(receivedDate, "Expected a research request with a received date.");
 const researchByDate = await query({ p_module: "research", p_from: receivedDate, p_to: receivedDate });
 assert(researchByDate.total > 0);
 assert(researchByDate.rows.every((row) => row.date_received === receivedDate));
-const biometrics = await query({ p_module: "biometrics" });
-assert.equal(biometrics.rows.length, Math.min(25, biometrics.total));
-const biometricStatus = biometrics.statuses[0];
-assert(biometricStatus, "Expected a biometric status filter option.");
-const biometricsByStatus = await query({ p_module: "biometrics", p_status: biometricStatus });
-assert(biometricsByStatus.total > 0);
-assert(biometricsByStatus.rows.every((row) => row.attendance_status === biometricStatus));
-
-console.log(JSON.stringify({
-  jobseekers: first.total,
-  jobseekerPages: Math.ceil(first.total / 25),
-  filteredStatus: status,
-  filteredTotal: filtered.total,
-  research: research.total,
-  researchOnDate: researchByDate.total,
-  biometrics: biometrics.total,
-  biometricsWithStatus: biometricsByStatus.total,
-}));
+for (const requestType of ["data_request", "interview_request"]) {
+  const typed = await query({ p_request_type: requestType });
+  assert(typed.rows.every((row) => row.request_type === requestType));
+}
+const { error: retiredError } = await supabase.schema("core").rpc("query_records", { p_module: "biometrics" });
+assert.equal(retiredError?.code, "22023", "Retired database must reject record queries.");
+console.log(JSON.stringify({ requests: first.total, requestPages: Math.ceil(first.total / 25), filteredStatus: status, filteredTotal: filtered.total, requestsOnDate: researchByDate.total }));

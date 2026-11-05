@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const { count, error } = await supabase
       .schema("core")
       .from("datasets")
-      .select("id", { count: "exact", head: true });
+      .select("id", { count: "exact", head: true }).eq("is_active", true);
     const databaseResponseMs = Math.round(performance.now() - databaseStartedAt);
 
     if (error) {

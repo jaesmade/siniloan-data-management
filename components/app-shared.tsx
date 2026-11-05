@@ -1,13 +1,20 @@
-export type DatabaseKey = "jobseekers" | "research" | "biometrics";
+import type { AccountStatus, AppRole, DatasetSlug } from "@/lib/database/types";
 
-export type AuthProfile = { id: string; full_name: string; username: string; email: string; role: "system_admin" | "dpo" | "office_focal" | "data_steward" | "staff"; status: "pending" | "active" | "rejected" | "suspended" };
+export type DatabaseKey = "research" | "tupad";
+export type RequestType = "data_request" | "interview_request";
+
+export type AuthProfile = { id: string; full_name: string; username: string; email: string; role: AppRole; status: AccountStatus };
 
 export type AccountTab = "approvals" | "users";
 
-export const databaseMeta: Record<DatabaseKey, { name: string; short: string; count: string; change: string; updated: string; color: string }> = {
-  jobseekers: { name: "Jobseeker Registry", short: "JS", count: "1,592", change: "+4.8%", updated: "8 min ago", color: "#1e5aa8" },
-  research: { name: "Research & Data Requests", short: "RD", count: "225", change: "+12.1%", updated: "26 min ago", color: "#0f766e" },
-  biometrics: { name: "Biometrics Data", short: "BD", count: "2", change: "1 personnel", updated: "Sep 10, 2026", color: "#b45309" },
+export const databaseMeta: Record<DatabaseKey, { name: string; short: string; color: string }> = {
+  research: { name: "Data & Interview Requests", short: "RQ", color: "#0f766e" },
+  tupad: { name: "TUPAD Beneficiaries", short: "TB", color: "#1e5aa8" },
+};
+
+export const datasetSlugs: Record<DatabaseKey, DatasetSlug> = {
+  research: "research_requests",
+  tupad: "tupad_beneficiaries",
 };
 
 export function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone?: string }) {
@@ -15,7 +22,7 @@ export function Badge({ children, tone = "neutral" }: { children: React.ReactNod
 }
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description: string; actions?: React.ReactNode }) {
-  return <><div className="page-header"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1><p>{description}</p></div>{actions && <div className="header-actions">{actions}</div>}</div></>;
+  return <div className="page-header"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1><p>{description}</p></div>{actions && <div className="header-actions">{actions}</div>}</div>;
 }
 
 export function ScreenLoading() {

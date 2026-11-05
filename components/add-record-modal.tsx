@@ -1,53 +1,30 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { CaretLeft, CaretRight, CheckCircle, IdentificationCard, SpinnerGap, X } from "@phosphor-icons/react";
+import { CheckCircle, IdentificationCard, SpinnerGap, X } from "@phosphor-icons/react";
 
 import { createClient } from "@/lib/supabase/client";
 
-type DatabaseKey = "jobseekers" | "research" | "biometrics";
+type DatabaseKey = "research";
 type Department = { id: string; code: string; name: string };
 
-const databaseNames: Record<DatabaseKey,string> = {
-  jobseekers: "Jobseeker Registry", research: "Research & Data Requests", biometrics: "Biometrics Data",
-};
-const jobseekerSteps=["Identity","Address","Employment","Education","Credentials","Experience"];
-
-const initialValues = { department_id:"", source_person_id:"", first_name:"", middle_name:"", surname:"", suffix:"", birth_date:"", sex:"", email:"", mobile_number:"", employment_status:"", highest_education:"", preferred_occupation:"", requester_name:"", institution_office:"", research_title_purpose:"", category:"", request_type:"data_request", control_number:"", date_received:"", status:"received", decision_notes:"", person_name:"", personnel_number:"", occurred_at:"", attendance_status:"", external_location_id:"", employment_id_number:"", workcode:"", verify_code:"", card_number:"" };
+const databaseNames: Record<DatabaseKey,string> = { research: "Data & Interview Requests" };
+const initialValues = { department_id:"", requester_name:"", institution_office:"", research_title_purpose:"", category:"", request_type:"data_request", control_number:"", date_received:"", status:"received", decision_notes:"" };
 
 export type EditableRecord = { id: string; version?: number; [key: string]: unknown };
 const fieldValue=(value:unknown)=>value===null||value===undefined?"":String(value);
-const localDateTime=(value:unknown)=>{
-  if(!value)return "";
-  const date=new Date(String(value));
-  if(Number.isNaN(date.valueOf()))return "";
-  return new Date(date.getTime()-date.getTimezoneOffset()*60_000).toISOString().slice(0,16);
-};
-function valuesForRecord(database:DatabaseKey,record:EditableRecord) {
-  const metadata=record.metadata && typeof record.metadata==="object" ? record.metadata as Record<string,unknown> : {};
+function valuesForRecord(record:EditableRecord) {
   const values={...initialValues};
   for(const field of Object.keys(initialValues) as Array<keyof typeof initialValues>) {
     values[field]=fieldValue(record[field]);
   }
-  if(database==="jobseekers") {
-    values.employment_status=fieldValue(metadata["EMPLOYMENT STATUS"]);
-    values.highest_education=fieldValue(metadata["HIGHEST EDUCATIONAL ATTAINMENT"]);
-    values.preferred_occupation=fieldValue(metadata["PREFERRED CCUPATION/S"]??metadata["PREFERRED OCCUPATION/S"]);
-  }
-  if(database==="biometrics")values.occurred_at=localDateTime(record.occurred_at);
-  if(database==="research")values.status=fieldValue(record.status)||"received";
+  values.status=fieldValue(record.status)||"received";
   return values;
 }
 
 export function AddRecordModal({ database, record, role="dpo", onClose, onSaved }: { database: DatabaseKey; record?: EditableRecord; role?: "dpo"|"office_focal"; onClose: () => void; onSaved: (message: string) => void }) {
   const editing=Boolean(record);
-  const [values,setValues]=useState(()=>record?valuesForRecord(database,record):initialValues);
-  const [jobseekerDetails,setJobseekerDetails]=useState<Record<string,string>>(()=>{
-    const metadata=record?.metadata;
-    return database==="jobseekers"&&metadata&&typeof metadata==="object"
-      ? Object.fromEntries(Object.entries(metadata).filter(([,value])=>typeof value==="string") as Array<[string,string]>) : {};
-  });
-  const [jobseekerStep,setJobseekerStep]=useState(0);
+  const [values,setValues]=useState(()=>record?valuesForRecord(record):initialValues);
   const [departments,setDepartments]=useState<Department[]>([]);
   const [loadingDepartments,setLoadingDepartments]=useState(true);
   const [saving,setSaving]=useState(false);
@@ -55,7 +32,6 @@ export function AddRecordModal({ database, record, role="dpo", onClose, onSaved 
   const dialogRef=useRef<HTMLElement>(null);
   const formRef=useRef<HTMLFormElement>(null);
   const update=(field:keyof typeof initialValues,value:string)=>setValues(current=>({...current,[field]:value}));
-  const updateJobseekerDetail=(field:string,value:string)=>setJobseekerDetails(current=>({...current,[field]:value}));
 
   useEffect(()=>{
     let active=true;
@@ -96,16 +72,13 @@ export function AddRecordModal({ database, record, role="dpo", onClose, onSaved 
 
   const submit=async(event:FormEvent)=>{
     event.preventDefault(); setSaving(true); setError("");
-    const metadata:Record<string,string>=database==="jobseekers" ? Object.fromEntries(Object.entries(jobseekerDetails).filter(([,value])=>editing||value.trim())) : {};
-    const payload={...values,metadata,occurred_at:values.occurred_at?new Date(values.occurred_at).toISOString():""};
+    const payload={...values};
     const client=createClient();
     const {error:saveError}=role==="office_focal"
       ? (record ? {error:{message:"Focalpersons cannot edit existing records."}} : await client.schema("core").rpc("stage_manual_submission",{p_module:database,p_data:payload}))
-      : database==="research"&&!record
-        ? await client.schema("core").rpc("create_research_request",{p_data:payload})
-        : record
-          ? await client.schema("core").rpc("update_manual_record",{p_module:database,p_record_id:record.id,p_version:record.version??1,p_data:payload})
-          : await client.schema("core").rpc("create_manual_record",{p_module:database,p_data:payload});
+      : record
+        ? await client.schema("core").rpc("update_manual_record",{p_module:database,p_record_id:record.id,p_version:record.version??1,p_data:payload})
+        : await client.schema("core").rpc("create_research_request",{p_data:payload});
     if(saveError){
       setError(saveError.code==="23505"?"A record with the same unique identifier already exists.":saveError.code==="40001"?"This record changed while you were editing. Close this form, refresh records, and try again.":saveError.message);
       setSaving(false); return;
@@ -113,87 +86,18 @@ export function AddRecordModal({ database, record, role="dpo", onClose, onSaved 
     onSaved(role==="office_focal"?`Submission sent to the DPO for review.`:`Record ${editing?"updated in":"added to"} ${databaseNames[database]}.`);
   };
 
-  const nextJobseekerStep=()=>{
-    if(!formRef.current?.reportValidity())return;
-    setJobseekerStep(current=>Math.min(current+1,jobseekerSteps.length-1));
-    formRef.current?.scrollTo({top:0,behavior:"smooth"});
-  };
-  const previousJobseekerStep=()=>{
-    setJobseekerStep(current=>Math.max(current-1,0));
-    formRef.current?.scrollTo({top:0,behavior:"smooth"});
-  };
-
   return <div className="modal-backdrop record-modal-backdrop" onMouseDown={(event)=>{if(event.target===event.currentTarget&&!saving)onClose()}}>
     <section ref={dialogRef} className="record-modal" role="dialog" aria-modal="true" aria-labelledby="add-record-title" aria-describedby="add-record-description">
-      <header className="record-modal-header"><div className="record-modal-icon"><IdentificationCard weight="duotone"/></div><div><span className="eyebrow">Individual data entry</span><h2 id="add-record-title">{editing?"Edit":"Add to"} {databaseNames[database]}</h2><p id="add-record-description">{editing?"Update this record using the fields from its source form.":"Enter one record using the fields from this database's source form."}</p></div><button type="button" className="icon-button" onClick={onClose} disabled={saving} aria-label="Close record dialog"><X/></button></header>
-      {database==="jobseekers"&&<nav className="jobseeker-stepper" aria-label="Jobseeker form progress">{jobseekerSteps.map((label,index)=><div className={index===jobseekerStep?"active":index<jobseekerStep?"complete":""} key={label}><span>{index<jobseekerStep?<CheckCircle weight="fill"/>:index+1}</span><small>{label}</small></div>)}</nav>}
+      <header className="record-modal-header"><div className="record-modal-icon"><IdentificationCard weight="duotone"/></div><div><h2 id="add-record-title">{editing?"Edit":"Add to"} {databaseNames[database]}</h2><p id="add-record-description">{editing?"Update this record using the fields from its source form.":"Enter one record using the fields from this database's source form."}</p></div><button type="button" className="icon-button" onClick={onClose} disabled={saving} aria-label="Close record dialog"><X/></button></header>
       <form ref={formRef} onSubmit={submit} className="record-modal-form">
-        {(database!=="jobseekers"||jobseekerStep===0)&&<div className="record-form-section"><div className="record-section-heading"><span>01</span><div><h3>Record ownership</h3><p>Choose the municipal department responsible for this record.</p></div></div><div className="record-form-grid"><label className="span-2">Department <b>*</b><select autoFocus value={values.department_id} onChange={e=>update("department_id",e.target.value)} required disabled={loadingDepartments}><option value="">{loadingDepartments?"Loading departments…":"Select department"}</option>{departments.map(item=><option key={item.id} value={item.id}>{item.name} ({item.code})</option>)}</select></label></div></div>}
-        {database==="jobseekers"&&<JobseekerFields step={jobseekerStep} values={values} update={update} details={jobseekerDetails} updateDetail={updateJobseekerDetail} editing={editing}/>}
-        {database==="research"&&<ResearchFields values={values} update={update}/>}
-        {database==="biometrics"&&<BiometricFields values={values} update={update}/>}
+        {<div className="record-form-section"><div className="record-section-heading"><div><h3>Record ownership</h3><p>Choose the municipal department responsible for this record.</p></div></div><div className="record-form-grid"><label className="span-2">Department <b>*</b><select autoFocus value={values.department_id} onChange={e=>update("department_id",e.target.value)} required disabled={loadingDepartments}><option value="">{loadingDepartments?"Loading departments…":"Select department"}</option>{departments.map(item=><option key={item.id} value={item.id}>{item.name} ({item.code})</option>)}</select></label></div></div>}
+        <ResearchFields values={values} update={update}/>
         {error&&<p className="form-error record-form-error" role="alert">{error}</p>}
-        <footer className="record-modal-actions"><span><CheckCircle/> {database==="jobseekers"?`Step ${jobseekerStep+1} of ${jobseekerSteps.length}`:"Required fields are marked with *"}</span><div>{database==="jobseekers"&&jobseekerStep>0&&<button type="button" className="button secondary" onClick={previousJobseekerStep} disabled={saving}><CaretLeft/> Back</button>}<button type="button" className="button secondary" onClick={onClose} disabled={saving}>Cancel</button>{database==="jobseekers"&&jobseekerStep<jobseekerSteps.length-1?<button type="button" className="button primary" onClick={nextJobseekerStep} disabled={loadingDepartments}>Continue <CaretRight/></button>:<button type="submit" className="button primary" disabled={saving||loadingDepartments}>{saving?<><SpinnerGap className="spin"/> Saving record…</>:editing?"Save changes":"Add record"}</button>}</div></footer>
+        <footer className="record-modal-actions"><span><CheckCircle/> Required fields are marked with *</span><div><button type="button" className="button secondary" onClick={onClose} disabled={saving}>Cancel</button>{<button type="submit" className="button primary" disabled={saving||loadingDepartments}>{saving?<><SpinnerGap className="spin"/> Saving record…</>:editing?"Save changes":"Add record"}</button>}</div></footer>
       </form>
     </section>
   </div>;
 }
 
 type FieldsProps={values:typeof initialValues;update:(field:keyof typeof initialValues,value:string)=>void};
-type JobseekerFieldsProps=FieldsProps & {step:number;details:Record<string,string>;updateDetail:(field:string,value:string)=>void;editing:boolean};
-type DetailField={key:string;label:string;type?:"text"|"date"|"email"|"number";options?:string[];required?:boolean;wide?:boolean};
-
-const select=(key:string,label:string,options:string[],required=false):DetailField=>({key,label,options,required});
-const textField=(key:string,label:string,required=false,wide=false,type:DetailField["type"]="text"):DetailField=>({key,label,required,wide,type});
-
-const personalDetails:DetailField[]=[
-  select("CIVIL STATUS","Civil status",["Single","Married","Widowed"],true),
-  select("RELIGION","Religion",["Roman Catholic","Iglesia ni Cristo (INC)","Islam (Muslim)","Seventh-day Adventist Church","Members Church of God International (MCGI)","Philippine Independent Church (Aglipayan)","Convention of the Philippine Baptist Churches","United Church of Christ in the Philippines (UCCP)","Jehovah's Witness","Evangelical Christianity","The Church of Jesus Christ of Latter-day Saints (Mormon)","Animism / Indigenous Folk Religions","Buddhism","Hinduism","Other Religion","None / Atheist"],true),
-  select("HEIGHT (FT.)","Height",["4'1","4'2","4'3","4'4","4'5","4'6","4'7","4'8","4'9","4'10","4'11","5'0","5'1","5'2","5'3","5'4","5'5","5'6","5'7","5'8","5'9","5'10","5'11","6'0","6'1","6'2","6'3","6'4","6'5"]),
-  textField("HOUSE NO./ STREET VILLAGE","House no. / street / village",true), textField("BARANGAY","Barangay",true), textField("MUNICIPALITY/ CITY","Municipality / city",true), textField("PROVINCE","Province",true), textField("TIN NUMBER","TIN number"),
-  textField("DISABILITY","Disability",true,true),
-];
-const employmentDetails:DetailField[]=[
-  select("EMPLOYEMENT TYPE","Employment type",["Wage-employed","Self-employed","Both"]), textField("IF SELF-EMPLOYED:","If self-employed, specify business"),
-  select("HOW LONG HAVE YOU BEEN LOOKING FOR WORK?","How long have you been looking for work?",["Less than 1 month","1–3 months","4–6 months","7–12 months","More than 1 year","Not applicable"]),
-  textField("REASON FOR UNEMPLOYEMENT","Reason for unemployment",false,true), select("ARE YOU A 4P's BENEFICIARY?","4Ps beneficiary?",["Yes","No"]), textField("IF YES, PLEASE PROVIDE HOUSEHOLD ID NO.","4Ps household ID"),
-  select("ARE YOU AN OFW?","Are you an OFW?",["Yes","No"]), textField("SPECIFY COUNTRY","Current OFW country"), select("ARE YOU A FORMER OFW?","Are you a former OFW?",["Yes","No"]), textField("LATEST COUNTRY OF DEPLOYMENT","Latest country of deployment"), textField("MONTH AND YEAR OF RETURN TO PHILIPPINES","Month and year returned"),
-];
-const preferenceDetails:DetailField[]=[
-  select("PREFERRED EMPLOYMENT TYPE","Preferred employment type",["Local","Overseas","Either"]), textField("PREFERRED WORK LOCATION","Preferred work location"), textField("PREFERRED CITY/ MUNICIPALITIES/ PROVINCE","Preferred city / municipality / province",false,true), textField("PREFERRED COUNTRIES","Preferred countries",false,true), textField("LANGUAGES","Languages / dialects",false,true), textField("OTHER LANGUAGE/DIALECT","Other language or dialect"), select("ARE YOU CURRENTLY ENROLLED IN SCHOOL?","Currently enrolled in school?",["Yes","No"]),
-];
-const educationDetails:DetailField[]=[
-  textField("ELEMENTARY NAME OF SCHOOL","Elementary school"), textField("ELEMENTARY YEAR GRADUATED","Elementary year graduated",false,false,"number"), textField("SECONDARY NAME OF SCHOOL","Secondary school"), textField("SECONDARY YEAR GRADUATED","Secondary year graduated",false,false,"number"), textField("JUNIOR HIGH SCHOOL NAME OF SCHOOL","Junior high school"), textField("JUNIOR HIGH SCHOOL YEAR GRADUATED","Junior high year graduated",false,false,"number"), textField("SENIOR HIGH SCHOOL NAME OF SCHOOL","Senior high school"), textField("SENIOR HIGH STRAND","Senior high strand"), textField("SENIOR HIGH YEAR GRADUATED","Senior high year graduated",false,false,"number"), textField("TERTIARY NAME OF SCHOOL","Tertiary school"), textField("COURSE/PROGRAM","Course / program"), textField("TERTIARY YEAR GRADUATED","Tertiary year graduated",false,false,"number"),
-];
-
-const repeatableKeys = [
-  ...["TRAINING/VOCATIONAL COURSE","HOURS OF TRAINING","TRAINING INSTITUTION","SKILLS ACQUIRED","CERTIFICATE RECEIVED"].flatMap(field=>[1,2,3].map(index=>`${field} ${index}`)),
-  ...["TYPE OF CIVIL SERVICE ELIGIBILITY?","DATE TAKEN"].flatMap(field=>[1,2].map(index=>`${field} ${index}`)),
-  ...["PROFESSIONAL LICENSE","EXPIRY DATE/ VALID UNTIL"].flatMap(field=>[1,2,3,4].map(index=>`${field} ${index}`)),
-  ...["COMPANY NAME","COMPANY ADDRESS (City/Municipality)","POSITION/ JOB TITLE","NUMBER OF MONTHS","STATUS"].flatMap(field=>[1,2,3,4,5].map(index=>`${field} ${index}`)),
-];
-const knownJobseekerMetadata=new Set([
-  ...personalDetails,...employmentDetails,...preferenceDetails,...educationDetails,
-  textField("SELECT ALL SKILLS THAT APPLY","Skills"),
-].map(field=>field.key).concat(repeatableKeys,["EMPLOYMENT STATUS","HIGHEST EDUCATIONAL ATTAINMENT","PREFERRED CCUPATION/S","PREFERRED OCCUPATION/S","ENTRY METHOD"]));
-
-function AdditionalJobseekerFields({details,updateDetail}:{details:Record<string,string>;updateDetail:(field:string,value:string)=>void}) {
-  const entries=Object.entries(details).filter(([key])=>!knownJobseekerMetadata.has(key));
-  if(!entries.length)return null;
-  return <section className="record-form-section"><div className="record-section-heading"><div><h3>Additional saved fields</h3><p>Fields present in this record’s source data beyond the standard form.</p></div></div><div className="record-form-grid">{entries.map(([key,value])=><label className="span-2" key={key}><span className="field-label">{key}</span><textarea value={value} onChange={event=>updateDetail(key,event.target.value)} maxLength={5000}/></label>)}</div></section>;
-}
-
-function DetailSection({number,title,description,fields,details,updateDetail,editing=false}:{number:string;title:string;description:string;fields:DetailField[];details:Record<string,string>;updateDetail:(field:string,value:string)=>void;editing?:boolean}){return <section className="record-form-section"><div className="record-section-heading"><span>{number}</span><div><h3>{title}</h3><p>{description}</p></div></div><div className="record-form-grid detail-grid">{fields.map(field=><label className={field.wide?"span-2":""} key={field.key}><span className="field-label">{field.label}{field.required&&!editing&&<b> *</b>}</span>{field.options?<select value={details[field.key]??""} onChange={e=>updateDetail(field.key,e.target.value)} required={field.required&&!editing}><option value="">Select</option>{details[field.key]&&!field.options.includes(details[field.key])&&<option value={details[field.key]}>Current: {details[field.key]}</option>}{field.options.map(option=><option key={option}>{option}</option>)}</select>:<input type={field.type??"text"} value={details[field.key]??""} onChange={e=>updateDetail(field.key,e.target.value)} required={field.required&&!editing} maxLength={500}/>}</label>)}</div></section>}
-
-function RepeatableSection({number,title,description,entryLabel,fields,count,details,updateDetail}:{number:string;title:string;description:string;entryLabel:string;fields:string[];count:number;details:Record<string,string>;updateDetail:(field:string,value:string)=>void}){return <section className="record-form-section"><div className="record-section-heading"><span>{number}</span><div><h3>{title}</h3><p>{description}</p></div></div>{Array.from({length:count},(_,index)=><fieldset className="repeatable-fields" key={index}><legend>{entryLabel} {index+1}</legend><div className="record-form-grid">{fields.map(field=>{const key=`${field} ${index+1}`;return <label key={key}><span className="field-label">{field}</span><input value={details[key]??""} onChange={e=>updateDetail(key,e.target.value)} maxLength={500}/></label>})}</div></fieldset>)}</section>}
-
-function JobseekerFields({step,values,update,details,updateDetail,editing}:JobseekerFieldsProps){
-  if(step===0)return <section className="record-form-section"><div className="record-section-heading"><span>02</span><div><h3>Personal details</h3><p>Required identity and contact information from NSRP Form 1.</p></div></div><div className="record-form-grid"><label><span className="field-label">First name <b>*</b></span><input value={values.first_name} onChange={e=>update("first_name",e.target.value)} maxLength={120} required/></label><label><span className="field-label">Middle name</span><input value={values.middle_name} onChange={e=>update("middle_name",e.target.value)} maxLength={120}/></label><label><span className="field-label">Surname <b>*</b></span><input value={values.surname} onChange={e=>update("surname",e.target.value)} maxLength={120} required/></label><label><span className="field-label">Suffix</span><input value={values.suffix} onChange={e=>update("suffix",e.target.value)} maxLength={30} placeholder="Jr., Sr., III"/></label><label><span className="field-label">Date of birth {!editing&&<b>*</b>}</span><input type="date" value={values.birth_date} onChange={e=>update("birth_date",e.target.value)} required={!editing}/></label><label><span className="field-label">Gender {!editing&&<b>*</b>}</span><select value={values.sex} onChange={e=>update("sex",e.target.value)} required={!editing}><option value="">Select</option><option>Female</option><option>Male</option><option>LGBTQIA+</option></select></label><label><span className="field-label">Email address</span><input type="email" value={values.email} onChange={e=>update("email",e.target.value)} maxLength={254}/></label><label><span className="field-label">Contact number {!editing&&<b>*</b>}</span><input value={values.mobile_number} onChange={e=>update("mobile_number",e.target.value)} maxLength={40} required={!editing}/></label><label className="span-2"><span className="field-label">Source person ID</span><input value={values.source_person_id} onChange={e=>update("source_person_id",e.target.value)} maxLength={80} placeholder="Optional external identifier"/></label></div></section>;
-  if(step===1)return <DetailSection number="03" title="Address and profile" description="Personal profile, address, and disability information." fields={personalDetails} details={details} updateDetail={updateDetail} editing={editing}/>;
-  if(step===2)return <><section className="record-form-section"><div className="record-section-heading"><span>04</span><div><h3>Employment preferences</h3><p>These values feed the concise Records preview.</p></div></div><div className="record-form-grid"><label><span className="field-label">Employment status {!editing&&<b>*</b>}</span><select value={values.employment_status} onChange={e=>update("employment_status",e.target.value)} required={!editing}><option value="">Select status</option><option>Employed</option><option>Unemployed</option></select></label><label><span className="field-label">Highest educational attainment</span><input value={values.highest_education} onChange={e=>update("highest_education",e.target.value)} maxLength={200}/></label><label className="span-2"><span className="field-label">Preferred occupation</span><input value={values.preferred_occupation} onChange={e=>update("preferred_occupation",e.target.value)} maxLength={200}/></label></div></section><DetailSection number="05" title="Employment and household" description="Employment type, job search, 4Ps, and OFW history." fields={employmentDetails} details={details} updateDetail={updateDetail} editing={editing}/><DetailSection number="06" title="Work preferences" description="Preferred employment, locations, countries, and languages." fields={preferenceDetails} details={details} updateDetail={updateDetail} editing={editing}/></>;
-  if(step===3)return <DetailSection number="07" title="Education" description="Schools, strands, programs, and graduation years." fields={educationDetails} details={details} updateDetail={updateDetail} editing={editing}/>;
-  if(step===4)return <><RepeatableSection number="08" title="Training" description="Record up to three technical or vocational trainings." entryLabel="Training" fields={["TRAINING/VOCATIONAL COURSE","HOURS OF TRAINING","TRAINING INSTITUTION","SKILLS ACQUIRED","CERTIFICATE RECEIVED"]} count={3} details={details} updateDetail={updateDetail}/><RepeatableSection number="09" title="Civil service eligibility" description="Record civil-service eligibility entries and their examination dates." entryLabel="Eligibility" fields={["TYPE OF CIVIL SERVICE ELIGIBILITY?","DATE TAKEN"]} count={2} details={details} updateDetail={updateDetail}/><RepeatableSection number="10" title="Professional licenses" description="Record up to four professional licenses and their expiry dates." entryLabel="License" fields={["PROFESSIONAL LICENSE","EXPIRY DATE/ VALID UNTIL"]} count={4} details={details} updateDetail={updateDetail}/></>;
-  return <><RepeatableSection number="11" title="Work experience" description="Record up to five employers, positions, and employment periods." entryLabel="Work experience" fields={["COMPANY NAME","COMPANY ADDRESS (City/Municipality)","POSITION/ JOB TITLE","NUMBER OF MONTHS","STATUS"]} count={5} details={details} updateDetail={updateDetail}/><DetailSection number="12" title="Skills" description="List all skills that apply to this jobseeker." fields={[textField("SELECT ALL SKILLS THAT APPLY","Skills",false,true)]} details={details} updateDetail={updateDetail} editing={editing}/><AdditionalJobseekerFields details={details} updateDetail={updateDetail}/></>;
-}
-function ResearchFields({values,update}:FieldsProps){return <><div className="record-form-section"><div className="record-section-heading"><span>02</span><div><h3>Requester and purpose</h3><p>Identity, institution, and requested research use.</p></div></div><div className="record-form-grid"><label>Request type<select value={values.request_type} onChange={e=>update("request_type",e.target.value)}><option value="data_request">Data Request</option><option value="interview_request">Interview Request</option></select></label><label>Requester name <b>*</b><input value={values.requester_name} onChange={e=>update("requester_name",e.target.value)} maxLength={160} required/></label><label>School / institution / office<input value={values.institution_office} onChange={e=>update("institution_office",e.target.value)} maxLength={240}/></label><label className="span-2">Research title / purpose <b>*</b><textarea value={values.research_title_purpose} onChange={e=>update("research_title_purpose",e.target.value)} maxLength={1000} required/></label><label>Category<input value={values.category} onChange={e=>update("category",e.target.value)} maxLength={120}/></label><label>Control number<input value="Assigned automatically" readOnly aria-readonly="true"/></label></div></div><div className="record-form-section"><div className="record-section-heading"><span>03</span><div><h3>Request tracking</h3><p>Initial status and receipt information.</p></div></div><div className="record-form-grid"><label>Date received<input type="date" value={values.date_received} onChange={e=>update("date_received",e.target.value)}/></label><label>Status<select value={values.status} onChange={e=>update("status",e.target.value)}><option value="received">Received</option><option value="under_review">Under review</option><option value="needs_information">Needs information</option><option value="approved">Approved</option><option value="denied">Denied</option><option value="released">Released</option><option value="closed">Closed</option></select></label><label className="span-2">Decision notes<textarea value={values.decision_notes} onChange={e=>update("decision_notes",e.target.value)} maxLength={1000}/></label></div></div></>}
-function BiometricFields({values,update}:FieldsProps){return <><div className="record-form-section"><div className="record-section-heading"><span>02</span><div><h3>Personnel event</h3><p>Identity and attendance fields from the biometric device export.</p></div></div><div className="record-form-grid"><label>Name <b>*</b><input value={values.person_name} onChange={e=>update("person_name",e.target.value)} maxLength={160} required/></label><label>Personnel number <b>*</b><input value={values.personnel_number} onChange={e=>update("personnel_number",e.target.value)} maxLength={80} required/></label><label>Date / time <b>*</b><input type="datetime-local" value={values.occurred_at} onChange={e=>update("occurred_at",e.target.value)} required/></label><label>Attendance status<input value={values.attendance_status} onChange={e=>update("attendance_status",e.target.value)} maxLength={80} placeholder="Time in, Time out"/></label><label>Location ID<input value={values.external_location_id} onChange={e=>update("external_location_id",e.target.value)} maxLength={80}/></label><label>ID number<input value={values.employment_id_number} onChange={e=>update("employment_id_number",e.target.value)} maxLength={80}/></label></div></div><div className="record-form-section"><div className="record-section-heading"><span>03</span><div><h3>Device metadata</h3><p>Optional verification values recorded by the device.</p></div></div><div className="record-form-grid"><label>Workcode<input value={values.workcode} onChange={e=>update("workcode",e.target.value)} maxLength={80}/></label><label>Verify code<input value={values.verify_code} onChange={e=>update("verify_code",e.target.value)} maxLength={80}/></label><label className="span-2">Card number<input value={values.card_number} onChange={e=>update("card_number",e.target.value)} maxLength={100}/></label></div></div></>}
+function ResearchFields({values,update}:FieldsProps){return <><div className="record-form-section"><div className="record-section-heading"><div><h3>Requester and purpose</h3><p>Identity, institution, and requested research use.</p></div></div><div className="record-form-grid"><label>Request type<select value={values.request_type} onChange={e=>update("request_type",e.target.value)}><option value="data_request">Data Request</option><option value="interview_request">Interview Request</option></select></label><label>Requester name <b>*</b><input value={values.requester_name} onChange={e=>update("requester_name",e.target.value)} maxLength={160} required/></label><label>School / institution / office<input value={values.institution_office} onChange={e=>update("institution_office",e.target.value)} maxLength={240}/></label><label className="span-2">Research title / purpose <b>*</b><textarea value={values.research_title_purpose} onChange={e=>update("research_title_purpose",e.target.value)} maxLength={1000} required/></label><label>Category<input value={values.category} onChange={e=>update("category",e.target.value)} maxLength={120}/></label><label>Control number<input value="Assigned automatically" readOnly aria-readonly="true"/></label></div></div><div className="record-form-section"><div className="record-section-heading"><div><h3>Request tracking</h3><p>Initial status and receipt information.</p></div></div><div className="record-form-grid"><label>Date received<input type="date" value={values.date_received} onChange={e=>update("date_received",e.target.value)}/></label><label>Status<select value={values.status} onChange={e=>update("status",e.target.value)}><option value="received">Received</option><option value="under_review">Under review</option><option value="needs_information">Needs information</option><option value="approved">Approved</option><option value="denied">Denied</option><option value="released">Released</option><option value="closed">Closed</option></select></label><label className="span-2">Decision notes<textarea value={values.decision_notes} onChange={e=>update("decision_notes",e.target.value)} maxLength={1000}/></label></div></div></>}

@@ -20,6 +20,7 @@ export async function POST(request: Request) {
 
   let body: { userId?: unknown };
   try { body = await request.json(); } catch { return Response.json({ error: "Invalid request body." }, { status: 400, headers: noStore }); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid request body." }, { status: 400, headers: noStore });
   const userId = typeof body.userId === "string" ? body.userId : "";
   if (!uuidPattern.test(userId)) return Response.json({ error: "Choose a valid account." }, { status: 400, headers: noStore });
 
@@ -58,5 +59,3 @@ export async function POST(request: Request) {
 
   return Response.json({ password: generatedPassword }, { headers: noStore });
 }
-
-

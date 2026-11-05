@@ -14,7 +14,7 @@ function query(sql){return execFileSync(docker,["exec","supabase_db_siniloan-ent
 const admin=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
 const definitions=[
  {username:"systemadmin",email:"systemadmin@siniloan.invalid",name:"Local System Administrator",role:"system_admin",department:"DPO"},
- {username:"dpo",email:"dpo@siniloan.invalid",name:"Local Data Protection Officer",role:"dpo",department:"DPO"},
+ {username:"dpo",email:"dpo@siniloan.invalid",name:"Local Data Privacy Officer",role:"dpo",department:"DPO"},
  {username:"focal",email:"focal@siniloan.invalid",name:"Local Office Focalperson",role:"office_focal",department:"PESO"},
  {username:"staff",email:"staff@siniloan.invalid",name:"Local Staff",role:"staff",department:"PESO"},
 ];

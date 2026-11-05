@@ -1,46 +1,57 @@
 # Siniloan Enterprise Data Management
 
-An internal municipal data-governance application for Siniloan. It provides controlled access to three operational datasets—jobseeker records, research and data requests, and biometric device events—using a Next.js web application and Supabase/PostgreSQL.
+An internal municipal data-governance application for Siniloan. It provides controlled access to data and interview requests and TUPAD beneficiary records using a Next.js web application and Supabase/PostgreSQL.
 
 > This system is designed for sensitive government data. Use only approved data, accounts, infrastructure, and retention procedures. Do not commit credentials or real personal data to this repository.
 
 ## What the system does
 
-- Lets municipal personnel request an account, then keeps it pending until Data Privacy Officer (DPO) review.
-- Applies role- and dataset-level access controls for DPOs, Data Stewards, and Staff.
-- Manages the Jobseeker Registry, Research & Data Requests, and Biometrics Data modules.
+- Lets municipal personnel request an account, then keeps it pending until System Administrator or Data Privacy Officer (DPO) review.
+- Applies role- and dataset-level access controls for System Administrators, DPOs, Office Focalpersons, and Staff.
+- Provides separate Data Request and Interview Request forms and DPO review pages, backed by one request register with shared permissions.
+- Maintains a separate TUPAD Beneficiaries database with complete workbook source fields.
 - Supports searchable, paginated record views, controlled manual entry, dashboards, and audit activity.
-- Lets users with read/write access edit individual records in all three datasets; edits are version checked and audited.
-- Imports CSV and XLSX files into all datasets; legacy XLS is supported for biometrics only.
-- Previews imports, rejects invalid/duplicate rows, records import jobs and row errors, and allows error CSV downloads.
+- Lets DPOs edit individual records in the request register; edits are version checked and audited.
+- Imports CSV and XLSX files into the request register and TUPAD Beneficiaries.
+- Previews imports, reports invalid rows and possible duplicates, records import jobs and row errors, and allows error CSV downloads.
 - Enforces database-level protections with Supabase Auth, PostgreSQL Row Level Security (RLS), audited operations, and rate limiting.
 
 ## Technology
 
 - Next.js 16, React 19, and TypeScript
 - Supabase Auth, PostgreSQL, Storage, and Supabase CLI
-- ExcelJS and `@e965/xlsx` for workbook imports
+- ExcelJS for workbook imports
 - Recharts and Phosphor Icons for the interface
 
 ## Data modules
 
 | Module | Purpose | Main schema |
 | --- | --- | --- |
-| Jobseeker Registry | Employment profiles, qualifications, training, and work preferences | `jobseekers` |
-| Research & Data Requests | Controlled intake and tracking of research/data requests | `research` |
-| Biometrics Data | Attendance-device event metadata and personnel identifiers | `biometrics` |
+| Data & Interview Requests | Separate guest intake and DPO review pages for each request type, with a shared register for records, imports, and reporting | `research` |
+| TUPAD Beneficiaries | Workbook imports, beneficiary search, and complete source-field review | `tupad` |
 
-Shared accounts, access grants, imports, audit events, and governance records are in the `core` schema. The complete implementation and data-governance rationale are documented in [docs/database-implementation.md](docs/database-implementation.md) and [docs/enterprise-data-management-plan.md](docs/enterprise-data-management-plan.md).
+Shared accounts, access grants, imports, audit events, and governance records are in the `core` schema. Current database controls are documented in [docs/database-implementation.md](docs/database-implementation.md); [docs/enterprise-data-management-plan.md](docs/enterprise-data-management-plan.md) preserves the historical planning baseline.
 
 ## Access model
 
 | Role | Capabilities |
 | --- | --- |
-| DPO | Approves/rejects accounts, manages departments and access grants, and sees the administrative overview and system activity. |
-| Data Steward | Sees the administrative overview and system-wide activity; access to source records still requires dataset grants. |
-| Staff | Can use only the datasets and access modes explicitly granted by the DPO. |
+| System Administrator | Manages accounts, departments, and assignments; sees aggregate database totals and system activity. |
+| DPO | Reads database records, imports files directly, reviews focalperson submissions, edits requests, records decisions and releases, and manages focalperson assignments. |
+| Office Focalperson | Submits request records and CSV/XLSX imports for DPO review when assigned to the destination dataset. |
+| Staff | Manages their profile; database records require DPO authority. |
 
-Dataset grants are independent of roles and may be `read_only` or `read_write`. No grant means no access. Database policies are the authority; hiding a screen in the UI is not considered access control.
+Database policies enforce the access model. Data Requests and Interview Requests have separate guest forms and DPO navigation pages. Each review page loads only its request type (`data_request` or `interview_request`) and retains the Incoming, For release, and Released queues. Both types share dataset permissions, control numbering, attachments, and audit history; the database register still supports filters across both types.
+
+TUPAD is an import-only workflow. DPO imports enter the database directly; assigned Office Focalperson imports remain staged until DPO approval. Manual add/edit forms remain available for the request register. TUPAD records support search, beneficiary-type and barangay filters, birth-date ranges, full details, and audited DPO deletion.
+
+## Retiring other databases
+
+`supabase/migrations/202611050001_requests_only.sql` permanently drops the Jobseeker and Biometrics schemas and deletes their staged submissions, import jobs, and import row errors. It preserves all request rows, attachments, control counters, accounts, departments, and audit events. Retired dataset registry entries remain inactive to preserve historical audit and grant references.
+
+Apply this migration to the intended deployment with `npx supabase migration up --local` for a running local stack, or `npx supabase db push` for the linked project after logging in. Check the target and pending migrations first. Existing migration files remain in the repository so existing deployments can upgrade and new deployments replay the same history.
+
+`supabase/migrations/202611050002_tupad_beneficiaries.sql` adds `tupad.beneficiaries`, registers the `tupad_beneficiaries` dataset, and extends import review, record queries, dashboards, access policies, and audit handling. Apply this migration with the same upgrade commands; existing request records are preserved.
 
 ## Requirements
 
@@ -101,7 +112,7 @@ This PC can serve the app to other devices on its current LAN at `http://192.168
 
 Keep the PC awake, signed in, and connected to the LAN. Reserve `192.168.1.101` for this PC in the router's DHCP settings; if its address or subnet changes, update `supabase/config.toml`, `scripts/enable-lan-firewall.ps1`, and this URL, then restart Supabase and rebuild/restart the app. To remove automatic startup, run `Unregister-ScheduledTask -TaskName 'Siniloan Enterprise Data Management' -Confirm:$false`.
 
-This HTTP and local Supabase CLI setup is suitable for test data on a trusted LAN. Before using real municipal or biometric records, add trusted HTTPS, replace local development credentials, secure backups, and review the database and host security controls.
+This HTTP and local Supabase CLI setup is suitable for test data on a trusted LAN. Before using real municipal records, add trusted HTTPS, replace local development credentials, secure backups, and review the database and host security controls.
 
 For a fresh local database with no DPO account, `node .\scripts\bootstrap-local-dpo.mjs` creates the first `admin` account with a generated password, activates its DPO profile, and records the bootstrap in the account decisions and audit log. It refuses to run if an active DPO or the `admin` username already exists. Store the printed password securely; the synthetic local email cannot receive recovery messages.
 
@@ -128,15 +139,25 @@ npm run build
 npm run db:test
 ```
 
-`scripts/verify-record-pagination.mjs` is an additional authenticated integration check. It requires a running app, a user with sufficient test data/access, and `TEST_USERNAME` plus `TEST_PASSWORD` in the environment.
+`scripts/verify-record-pagination.mjs` is an additional authenticated integration check. It requires a running app, an active DPO account with at least 26 synthetic request records (including a received date), and `TEST_USERNAME`, `TEST_PASSWORD`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in the environment. Set `TEST_APP_URL` when the app is not running at `http://localhost:3000`.
+
+With Node.js 22.18 or later, `node scripts/verify-tupad-import.mjs` checks the TUPAD parser using synthetic workbooks in memory. Add the supplied workbook's local path as an optional argument to verify all 177 beneficiary rows and their 24 source columns:
+
+```powershell
+node scripts/verify-tupad-import.mjs "C:\path\to\LAWA-SINILOAN-165-FINDINGS-2.xlsx"
+```
+
+The verifier does not write beneficiary data to the repository. Keep operational source workbooks outside version control.
 
 ## Import rules
 
 - Maximum upload: 25 MB and 25,000 data rows.
-- Supported formats: CSV and XLSX for all modules; XLS only for Biometrics.
-- Imports are previewed before commit and blocked when the exact file was already completed.
+- Supported formats: CSV and XLSX.
+- Imports are previewed before commit. Repeated files and possible duplicate rows produce warnings; re-imports are allowed.
 - Files are limited to 10 import attempts per actor/fingerprint per hour.
-- Jobseeker rows require surname and first name; research rows require requester name and title/purpose; biometric rows require name, personnel number, and valid date/time.
+- Request rows require requester name and title/purpose; TUPAD rows require first and last names. Invalid birth dates or ages are reported for correction.
+
+The TUPAD importer discovers beneficiary headers below template titles and reads every populated worksheet. It preserves all 24 supplied columns, including hidden training fields, plus additional, duplicate, and unlabelled columns in `raw_source`. Source sheet/row identifiers, template context, column visibility, formula text and cached values, and number formats are retained as provenance metadata. Dates and ages have typed fields; identifiers, phone numbers, account numbers, and income text retain their source meaning without automatic corrections. Blank template rows and signature/footer content are excluded from beneficiary counts; template context remains saved with imported records.
 
 Treat the supplied `sampla-data/` workbooks as sample inputs. Validate headers, data quality, department assignment, lawful purpose, and retention requirements before importing operational data.
 

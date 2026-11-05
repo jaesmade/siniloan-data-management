@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Badge, PageHeader, ScreenLoading, databaseMeta, type DatabaseKey, type AuthProfile, type AccountTab } from "./app-shared";
-import { Archive, ArrowLeft, ArrowRight, Bell, CaretDown, UserCircle, Check, CheckCircle, Clock, Database, Eye, EyeSlash, FileArrowUp, Fingerprint, Gauge, House, IdentificationCard, Pulse, List, Lock, ShieldCheck, SignOut, SpinnerGap, UserPlus, Users, ClipboardText, WarningCircle, X } from "@phosphor-icons/react";
+import { Badge, PageHeader, ScreenLoading, databaseMeta, type DatabaseKey, type AuthProfile, type AccountTab, type RequestType } from "./app-shared";
+import { ArrowLeft, ArrowRight, Bell, CaretDown, UserCircle, Check, CheckCircle, Clock, Database, Eye, EyeSlash, FileArrowUp, Gauge, House, Pulse, List, Lock, ShieldCheck, SignOut, SpinnerGap, UserPlus, Users, ClipboardText, WarningCircle, X } from "@phosphor-icons/react";
 
 import { ProfileManager } from "./profile-manager";
 
@@ -11,7 +11,7 @@ import { Landing } from "./guest-landing";
 
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
-type Screen = "landing" | "requestData" | "login" | "register" | "pending" | "admin" | "databases" | "database" | "accountManagement" | "activity" | "submissions" | "dataRequests" | "staffHome" | "import";
+type Screen = "landing" | "requestData" | "requestInterview" | "login" | "register" | "pending" | "admin" | "databases" | "database" | "accountManagement" | "activity" | "submissions" | "dataRequests" | "interviewRequests" | "staffHome" | "import";
 type Role = "System Administrator" | "DPO" | "Office Focalperson" | "Staff";
 type HeaderNotification = { id: number; action: string; summary: string; occurred_at: string; outcome: string; dataset_id: string | null };
 
@@ -45,7 +45,7 @@ function AuthShell({ children, step }: { children: React.ReactNode; step?: strin
 type Department = { id: string; name: string };
 
 function roleLabel(role: AuthProfile["role"]): Role {
-  return role === "system_admin" ? "System Administrator" : role === "dpo" ? "DPO" : role === "office_focal" || role === "data_steward" ? "Office Focalperson" : "Staff";
+  return role === "system_admin" ? "System Administrator" : role === "dpo" ? "DPO" : role === "office_focal" ? "Office Focalperson" : "Staff";
 }
 
 function accountInitials(name: string) {
@@ -86,7 +86,7 @@ function StaffWorkspace({profile}:{profile:AuthProfile}) {
  return <div className="page"><PageHeader title={`Welcome, ${profile.full_name}`} description="Your account is active, but it does not currently have workspace permissions."/><section className="panel empty-state staff-no-access"><ShieldCheck/><h2>No access assigned</h2><p>Contact your System Administrator if your duties require access. You can still manage your profile or sign out from the account menu.</p></section></div>;
 }
 function Pending({ navigate }: { navigate: (s: Screen) => void }) {
-  return <AuthShell><div className="status-card"><div className="status-icon"><Clock weight="fill" /></div><Badge tone="amber">Pending review</Badge><h2>Your request has been submitted</h2><p>The Data Privacy Officer will verify your account and assign access to the appropriate databases.</p><div className="request-summary"><div><span>Request number</span><strong>ACC-2026-0047</strong></div><div><span>Submitted</span><strong>September 20, 2026</strong></div><div><span>Department</span><strong>Municipal Planning & Development</strong></div></div><div className="next-steps"><strong>What happens next?</strong><ol><li><span>1</span>DPO verifies your identity and department</li><li><span>2</span>DPO assigns database access and permissions</li><li><span>3</span>You can sign in when your account is active</li></ol></div><button className="button secondary full" onClick={() => navigate("login")}><ArrowLeft /> Return to sign in</button></div></AuthShell>;
+  return <AuthShell><div className="status-card"><div className="status-icon"><Clock weight="fill" /></div><Badge tone="amber">Pending review</Badge><h2>Your request has been submitted</h2><p>The Data Privacy Officer will verify your account and assign access to the appropriate databases.</p><div className="next-steps"><strong>What happens next?</strong><ol><li><span>1</span>DPO verifies your identity and department</li><li><span>2</span>DPO assigns database access and permissions</li><li><span>3</span>You can sign in when your account is active</li></ol></div><button className="button secondary full" onClick={() => navigate("login")}><ArrowLeft /> Return to sign in</button></div></AuthShell>;
 }
 
 const navItems: { screen: Screen; label: string; icon: typeof House; roles?: Role[] }[] = [
@@ -96,6 +96,7 @@ const navItems: { screen: Screen; label: string; icon: typeof House; roles?: Rol
   { screen: "activity", label: "System activity", icon: Pulse, roles: ["System Administrator"] },
   { screen: "submissions", label: "Import approvals", icon: FileArrowUp, roles: ["DPO"] },
   { screen: "dataRequests", label: "Data Requests", icon: ClipboardText, roles: ["DPO"] },
+  { screen: "interviewRequests", label: "Interview Requests", icon: ClipboardText, roles: ["DPO"] },
   { screen: "databases", label: "My submissions", icon: ClipboardText, roles: ["Office Focalperson"] },
   { screen: "staffHome", label: "Workspace", icon: House, roles: ["Staff"] },
 ];
@@ -152,7 +153,8 @@ function AppShell({ screen, setScreen, openApprovals, profile, role, selectedDat
         .abortSignal(controller.signal).then(({ data }: { data: unknown }) => {
           if (controller.signal.aborted) return;
           const keys: Record<string, DatabaseKey> = {
-            jobseeker_registry: "jobseekers", research_requests: "research", biometric_events: "biometrics",
+            research_requests: "research",
+            tupad_beneficiaries: "tupad",
           };
           const datasets = (data ?? []) as { id: string; slug: string }[];
           setDatasetRoutes(Object.fromEntries(datasets.filter(item => keys[item.slug]).map(item => [item.id, keys[item.slug]])));
@@ -202,7 +204,7 @@ function AppShell({ screen, setScreen, openApprovals, profile, role, selectedDat
     if (item.action === "auth.login") { setScreen(role === "System Administrator" ? "activity" : "admin"); return; }
     const database = item.dataset_id ? datasetRoutes[item.dataset_id] : undefined;
     if (database) openDatabase(database);
-    else setScreen("activity");
+    else setScreen(role === "DPO" ? "submissions" : "activity");
   };
 
   return <div className="app-shell">
@@ -212,7 +214,7 @@ function AppShell({ screen, setScreen, openApprovals, profile, role, selectedDat
       <nav aria-label="Main navigation">
         <div className="nav-label">Workspace</div>
         {navItems.filter(i => !i.roles || i.roles.includes(role)).map(item => <button key={item.screen} className={screen === item.screen ? "active" : ""} onClick={() => { setScreen(item.screen); setMobileOpen(false); }}><item.icon /><span>{item.label}</span>{item.screen === "accountManagement" && pendingApprovalCount > 0 && <em>{pendingApprovalCount}</em>}</button>)}
-        <div className="nav-label">Databases</div>
+        {role === "DPO" && <div className="nav-label">Databases</div>}
         {role === "DPO" && (Object.keys(databaseMeta) as DatabaseKey[]).map(key => <button key={key} className={screen === "database" && selectedDatabase === key ? "subtle-active database-active" : ""} onClick={() => { openDatabase(key); setMobileOpen(false); }}><span className="db-dot" style={{ background: databaseMeta[key].color }} /> <span>{databaseMeta[key].name}</span></button>)}
       </nav>
     </aside>
@@ -259,21 +261,22 @@ function AppShell({ screen, setScreen, openApprovals, profile, role, selectedDat
 }
 
 function Databases({ openDatabase, importDatabase }: { openDatabase: (key: DatabaseKey) => void; importDatabase: (key: DatabaseKey) => void }) {
-  return <div className="page"><PageHeader eyebrow="Workspace" title="My databases" description="Open the datasets you have permission to view or manage." />
-    <div className="database-grid">{(Object.keys(databaseMeta) as DatabaseKey[]).map((key, i) => { const db = databaseMeta[key]; const Icon = [IdentificationCard, Archive, Fingerprint][i]; return <article className="database-card" key={key}><div className="db-card-head"><span style={{ color: db.color, background: `${db.color}14` }}><Icon weight="duotone" /></span><Badge tone={i === 1 ? "green" : "blue"}>{i === 1 ? "Read only" : "Read/write"}</Badge></div><h2>{db.name}</h2><p>{i === 0 ? "Employment profiles, qualifications, training and work preferences." : i === 1 ? "Requests, research purposes, reviews and controlled releases." : "Biometric attendance records, personnel, locations, and verification data."}</p><div className="db-card-meta"><div><strong>{db.count}</strong><span>records</span></div><div><strong>{db.updated}</strong><span>last updated</span></div></div><button className="button primary full" onClick={() => importDatabase(key)}><FileArrowUp /> Import data</button><button className="button secondary full" onClick={() => openDatabase(key)}>Open database <ArrowRight /></button></article>})}</div>
+  return <div className="page"><PageHeader title="Municipal databases" description="Open a database to review records or import a source file." />
+    {(Object.keys(databaseMeta) as DatabaseKey[]).map(key=><section className="panel" key={key} style={{marginBottom:18}}><div className="panel-header"><div><h2>{databaseMeta[key].name}</h2><p>{key==="research"?"Data requests and interview requests are kept together, with separate filters for each request type.":"Upload beneficiary workbooks and review all saved source fields."}</p></div></div><div className="header-actions table-toolbar"><button className="button primary" onClick={() => openDatabase(key)}>Open database <ArrowRight /></button><button className="button secondary" onClick={() => importDatabase(key)}><FileArrowUp /> Import data</button></div></section>)}
   </div>;
 }
 
 export function EnterpriseDataApp() {
-  const [screen, setScreen] = useState<Screen>("landing"); const [role, setRole] = useState<Role>("Staff"); const [profile, setProfile] = useState<AuthProfile | null>(null); const [booting, setBooting] = useState(true);
+  const [screen, setScreen] = useState<Screen>("landing"); const [profile, setProfile] = useState<AuthProfile | null>(null); const [booting, setBooting] = useState(true);
+  const role = profile ? roleLabel(profile.role) : "Staff";
   const [accountTab, setAccountTab] = useState<AccountTab>("approvals");
-  const [selectedDatabase, setSelectedDatabase] = useState<DatabaseKey>("jobseekers");
+  const [selectedDatabase, setSelectedDatabase] = useState<DatabaseKey>("research");
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const openDatabase = (key: DatabaseKey) => { setSelectedDatabase(key); setScreen("database"); };
   const importDatabase = (key: DatabaseKey) => { setSelectedDatabase(key); setScreen("import"); };
   const openApprovals = () => { setAccountTab("approvals"); setScreen("accountManagement"); };
-  const activateProfile = (nextProfile: AuthProfile) => { setProfile(nextProfile); setRole(roleLabel(nextProfile.role)); setScreen(nextProfile.status !== "active" ? "pending" : nextProfile.role === "staff" ? "staffHome" : nextProfile.role === "office_focal" ? "databases" : "admin"); };
+  const activateProfile = (nextProfile: AuthProfile) => { setProfile(nextProfile); setScreen(nextProfile.status !== "active" ? "pending" : nextProfile.role === "staff" ? "staffHome" : nextProfile.role === "office_focal" ? "databases" : "admin"); };
   useEffect(() => {
     let active = true;
     const supabase = createSupabaseClient();
@@ -290,11 +293,11 @@ export function EnterpriseDataApp() {
       if (active) setBooting(false);
     });
     return () => { active = false; window.clearTimeout(fallbackTimer); subscription.unsubscribe(); };
-  }, []);  useEffect(() => { if (!profile || !["dpo","system_admin"].includes(profile.role) || profile.status !== "active") return; let active = true; const refreshCount = () => createSupabaseClient().schema("core").from("profiles").select("id", { count: "exact", head: true }).eq("status", "pending").then(({ count }: { count: number | null }) => { if (active) setPendingApprovalCount(count ?? 0); }); refreshCount(); const timer = window.setInterval(refreshCount, 30_000); return () => { active = false; window.clearInterval(timer); }; }, [profile?.role, profile?.status]);
-  const signOut = async () => { await createSupabaseClient().auth.signOut(); setProfile(null); setRole("Staff"); setPendingApprovalCount(0); setPasswordRecovery(false); setScreen("landing"); };
+  }, []);  useEffect(() => { if (!profile || !["dpo","system_admin"].includes(profile.role) || profile.status !== "active") return; let active = true; const refreshCount = () => createSupabaseClient().schema("core").from("profiles").select("id", { count: "exact", head: true }).eq("status", "pending").then(({ count }: { count: number | null }) => { if (active) setPendingApprovalCount(count ?? 0); }); refreshCount(); const timer = window.setInterval(refreshCount, 30_000); return () => { active = false; window.clearInterval(timer); }; }, [profile]);
+  const signOut = async () => { await createSupabaseClient().auth.signOut(); setProfile(null); setPendingApprovalCount(0); setPasswordRecovery(false); setScreen("landing"); };
   if (booting) return <AuthShell><div className="status-card"><SpinnerGap className="spin" /><h2>Checking your secure session</h2><p>Loading your approved account and permissions.</p></div></AuthShell>;
-  if (screen === "landing") return <Landing onRequest={()=>setScreen("requestData")} onSignIn={()=>setScreen("login")}/>;
-  if (screen === "requestData") return <GuestRequestForm onBack={()=>setScreen("landing")}/>;
+  if (screen === "landing") return <Landing onRequest={(requestType: RequestType)=>setScreen(requestType === "interview_request" ? "requestInterview" : "requestData")} onSignIn={()=>setScreen("login")}/>;
+  if (screen === "requestData" || screen === "requestInterview") return <GuestRequestForm key={screen} requestType={screen === "requestInterview" ? "interview_request" : "data_request"} onBack={()=>setScreen("landing")}/>;
   if (screen === "login") return <Login navigate={setScreen} onAuthenticated={activateProfile} />;
   if (screen === "register") return <Register navigate={setScreen} />;
   if (screen === "pending") return <Pending navigate={setScreen} />;
@@ -305,7 +308,8 @@ export function EnterpriseDataApp() {
     case "database": content=profile?.role==="dpo"?<LiveModuleDashboard key={selectedDatabase} database={selectedDatabase} onImport={()=>setScreen("import")}/>:null; break;
     case "accountManagement": content=profile&&(profile.role==="dpo"||profile.role==="system_admin")?<AccountManagement role={profile.role} tab={accountTab} onTabChange={setAccountTab} pendingApprovalCount={pendingApprovalCount} onCountChange={setPendingApprovalCount}/>:null; break;
     case "submissions": content=profile?.role==="dpo"?<DataSubmissionReview/>:null; break;
-    case "dataRequests": content=profile?.role==="dpo"?<DataRequestManagement/>:null; break;
+    case "dataRequests": content=profile?.role==="dpo"?<DataRequestManagement key="data_request" requestType="data_request"/>:null; break;
+    case "interviewRequests": content=profile?.role==="dpo"?<DataRequestManagement key="interview_request" requestType="interview_request"/>:null; break;
     case "staffHome": content=profile?.role==="staff"?<StaffWorkspace profile={profile}/>:null; break;
     case "activity": content=profile?.role==="system_admin"?<SystemActivity/>:null; break;
     case "import": content=(profile?.role==="dpo"||profile?.role==="office_focal")?<div className="modal-backdrop import-modal-backdrop"><section className="panel import-modal"><button className="icon-button import-modal-close" onClick={()=>setScreen(profile.role==="office_focal"?"databases":"database")} aria-label="Close import">×</button><ImportFlow key={selectedDatabase} initialModule={selectedDatabase}/></section></div>:null; break;

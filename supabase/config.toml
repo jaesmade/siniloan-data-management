@@ -3,7 +3,7 @@ project_id = "siniloan-enterprise-data"
 [api]
 enabled = true
 port = 54321
-schemas = ["public", "graphql_public", "core", "jobseekers", "research", "biometrics"]
+schemas = ["public", "graphql_public", "core", "research", "tupad"]
 extra_search_path = ["public", "extensions", "core"]
 max_rows = 1000
 

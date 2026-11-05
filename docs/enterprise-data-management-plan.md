@@ -1,6 +1,8 @@
 # Government Enterprise Data Management website plan
 
-Planning baseline: 20 September 2026. Scope: an internal government web application built with Next.js, hosted Supabase for production, and a local Supabase stack for development and automated database tests. This document proposes the implementation; no application or database has been deployed.
+Planning baseline: 20 September 2026. Scope at that time: an internal government web application built with Next.js, hosted Supabase for production, and a local Supabase stack for development and automated database tests. This document preserves the original proposal, before implementation and deployment.
+
+The current application has since adopted System Administrator, DPO, Office Focalperson, and Staff roles; separate guest data/interview request forms; and TUPAD Beneficiaries. Jobseeker and Biometrics modules are retired. Use [../README.md](../README.md), [database-implementation.md](database-implementation.md), and the migration chain for current behavior; the proposed modules, permissions, and release gates below remain historical planning context.
 
 ## 1. Dataset findings and initial modules
 

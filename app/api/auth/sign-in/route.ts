@@ -26,6 +26,7 @@ export async function POST(request: Request) {
   } catch {
     return invalidCredentials();
   }
+  if (!credentials || typeof credentials !== "object" || Array.isArray(credentials)) return invalidCredentials();
 
   const username = typeof credentials.username === "string" ? credentials.username.trim() : "";
   const password = typeof credentials.password === "string" ? credentials.password : "";

@@ -2,8 +2,7 @@
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle, IdentificationCard, ShieldCheck, SpinnerGap, UploadSimple } from "@phosphor-icons/react";
-
-type RequestType = "data_request" | "interview_request";
+import type { RequestType } from "./app-shared";
 
 function RequestImageField({ id, title, hint, file, required, onChange }: {
   id: string;
@@ -37,8 +36,8 @@ function RequestImageField({ id, title, hint, file, required, onChange }: {
   </div>;
 }
 
-export function GuestRequestForm({ onBack }: { onBack: () => void }) {
-  const [type, setType] = useState<RequestType>("data_request");
+export function GuestRequestForm({ requestType, onBack }: { requestType: RequestType; onBack: () => void }) {
+  const isInterview = requestType === "interview_request";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [institution, setInstitution] = useState("");
@@ -58,7 +57,7 @@ export function GuestRequestForm({ onBack }: { onBack: () => void }) {
     setBusy(true);
     setError("");
     const form = new FormData();
-    form.set("request_type", type);
+    form.set("request_type", requestType);
     form.set("requester_name", name.trim());
     form.set("email", email.trim());
     form.set("institution_office", institution.trim());
@@ -88,11 +87,11 @@ export function GuestRequestForm({ onBack }: { onBack: () => void }) {
       <div className={`guest-request-layout ${receipt ? "receipt-layout" : ""}`}>
         {!receipt && <aside className="guest-request-aside">
 
-          <h1>Start a request with the municipality.</h1>
-          <p className="guest-request-intro">Share what you need and how to contact you. The Data Protection Officer reviews each request before a decision is made.</p>
+          <h1>{isInterview ? "Request an interview." : "Request municipal data."}</h1>
+          <p className="guest-request-intro">{isInterview ? "Tell us who you would like to interview, the topic, and how to contact you." : "Tell us what municipal data you need, how it will be used, and how to contact you."} The Data Privacy Officer reviews each request before a decision is made.</p>
           <div className="guest-request-steps">
             <div><span>1</span><p><strong>Tell us about yourself</strong><small>Provide your name and a working email address.</small></p></div>
-            <div><span>2</span><p><strong>Describe your request</strong><small>Choose a request type and explain its purpose.</small></p></div>
+            <div><span>2</span><p><strong>{isInterview ? "Describe the interview" : "Describe the data you need"}</strong><small>{isInterview ? "Explain your topic and the purpose of the interview." : "Explain which information you need and its purpose."}</small></p></div>
             <div><span>3</span><p><strong>Attach two images</strong><small>Include an ID image and an image of your request letter.</small></p></div>
           </div>
           <div className="guest-privacy-note"><ShieldCheck/><p><strong>Private review</strong><small>Your attachments are kept private for DPO review.</small></p></div>
@@ -101,13 +100,13 @@ export function GuestRequestForm({ onBack }: { onBack: () => void }) {
         <section className="panel guest-request-card">
           {receipt ? <div className="guest-receipt">
             <span className="guest-receipt-icon"><CheckCircle weight="fill"/></span>
-            <h1>Request received</h1>
-            <p>Your request has been submitted for DPO review. Keep this reference number for your records.</p>
+            <h1>{isInterview ? "Interview request received" : "Data request received"}</h1>
+            <p>Your {isInterview ? "interview" : "data"} request has been submitted for DPO review. Keep this reference number for your records.</p>
             <div className="guest-reference"><span>Request control number</span><strong>{receipt.control_number}</strong></div>
-            <div className="guest-receipt-note"><ShieldCheck/><span>The DPO will review your submission before any data is released.</span></div>
+            <div className="guest-receipt-note"><ShieldCheck/><span>{isInterview ? "The DPO will review your interview request before a decision is made." : "The DPO will review your submission before any data is released."}</span></div>
             <button type="button" className="button primary" onClick={onBack}>Return to home <ArrowRight/></button>
           </div> : <>
-            <header className="guest-form-heading"><div><h2>Request details</h2><p>Fields marked required must be completed.</p></div><span className="guest-required-note"><i/> Required</span></header>
+            <header className="guest-form-heading"><div><h2>{isInterview ? "Interview request details" : "Data request details"}</h2><p>Fields marked required must be completed.</p></div><span className="guest-required-note"><i/> Required</span></header>
             <form onSubmit={submit}>
               <fieldset className="guest-form-section">
                 <legend>Your details</legend>
@@ -119,10 +118,9 @@ export function GuestRequestForm({ onBack }: { onBack: () => void }) {
               </fieldset>
 
               <fieldset className="guest-form-section">
-                <legend>Request information</legend>
+                <legend>{isInterview ? "Interview information" : "Data requested"}</legend>
                 <div className="guest-form-grid">
-                  <label className="guest-form-wide">Request type <span className="required-mark">*</span><select value={type} onChange={e => setType(e.target.value as RequestType)}><option value="data_request">Data request</option><option value="interview_request">Interview request</option></select><small className="field-hint">Choose the option that best matches what you are requesting.</small></label>
-                  <label className="guest-form-wide">Purpose of your request <span className="required-mark">*</span><textarea value={purpose} onChange={e => setPurpose(e.target.value)} maxLength={1000} placeholder="Describe the information or interview you are requesting and how it will be used." required/><small className="field-hint">{purpose.length}/1000 characters</small></label>
+                  <label className="guest-form-wide">{isInterview ? "Interview topic and purpose" : "Data needed and purpose"} <span className="required-mark">*</span><textarea value={purpose} onChange={e => setPurpose(e.target.value)} maxLength={1000} placeholder={isInterview ? "Who would you like to interview, what topics will you cover, and how will the interview be used?" : "Describe the municipal data you need and how it will be used."} required/><small className="field-hint">{purpose.length}/1000 characters</small></label>
                 </div>
               </fieldset>
 
@@ -136,7 +134,7 @@ export function GuestRequestForm({ onBack }: { onBack: () => void }) {
               </fieldset>
 
               {error && <p className="guest-form-error" role="alert">{error}</p>}
-              <footer className="guest-submit-row"><span><ShieldCheck/> Attachments are kept private for review.</span><button className="button primary" disabled={busy}>{busy ? <><SpinnerGap className="spin"/> Submitting…</> : <>Submit request <ArrowRight/></>}</button></footer>
+              <footer className="guest-submit-row"><span><ShieldCheck/> Attachments are kept private for review.</span><button type="submit" className="button primary" disabled={busy}>{busy ? <><SpinnerGap className="spin"/> Submitting…</> : <>Submit {isInterview ? "interview" : "data"} request <ArrowRight/></>}</button></footer>
             </form>
           </>}
         </section>

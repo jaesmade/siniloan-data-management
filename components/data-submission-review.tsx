@@ -10,7 +10,7 @@ type Item = {
   source_filename: string | null;
   total_rows: number;
   created_at: string;
-  datasets: { name: string } | null;
+  datasets: { name: string; slug: string } | null;
 };
 type PreviewRow = Record<string, unknown>;
 const PAGE_SIZE = 25;
@@ -36,7 +36,7 @@ export function DataSubmissionReview() {
     try {
       const { data, count, error } = await createClient().schema("core")
         .from("data_submissions")
-        .select("id,submission_type,source_filename,total_rows,created_at,datasets(name)", { count: "exact" })
+        .select("id,submission_type,source_filename,total_rows,created_at,datasets(name,slug)", { count: "exact" })
         .eq("status", "pending_review")
         .order("created_at")
         .order("id")
@@ -139,7 +139,7 @@ export function DataSubmissionReview() {
         <header className="panel-header"><div><h2 id="submission-review-title">Review {selected.datasets?.name ?? "Dataset"}</h2><p>{selected.source_filename ?? "Manual entry"} · {selected.total_rows} rows</p></div><button className="icon-button" disabled={saving} onClick={() => setSelected(null)} aria-label="Close review">×</button></header>
         {previewError ? <p className="form-error" role="alert">{previewError}</p>
           : preview === null ? <div className="empty-state" role="status"><SpinnerGap className="spin"/><p>Loading preview…</p></div>
-          : <><div className="submission-preview">{preview.map((row, index) => <dl key={index}>{Object.entries(row).filter(([key]) => !["metadata", "raw_source"].includes(key)).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{String(value ?? "—")}</dd></div>)}</dl>)}</div>{selected.total_rows > 30 && <p>Showing 30 of {selected.total_rows} rows. Approval applies to the full submission.</p>}</>}
+          : <><div className="submission-preview">{preview.map((row, index) => <dl key={index}>{Object.entries(row).filter(([key]) => !["metadata", "raw_source"].includes(key)).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{String(value ?? "—")}</dd></div>)}{row.raw_source!==null&&typeof row.raw_source==="object"&&<div><dt>Original source fields</dt><dd><details><summary>Show all imported fields</summary>{Object.entries(row.raw_source).map(([key,value])=><p key={key}><strong>{key}: </strong>{value!==null&&typeof value==="object"?JSON.stringify(value,null,2):String(value??"—")}</p>)}</details></dd></div>}{selected.datasets?.slug==="tupad_beneficiaries"&&row.metadata!==null&&typeof row.metadata==="object"&&<div style={{gridColumn:"1 / -1"}}><dt>Source metadata</dt><dd><details><summary>Workbook context and source details</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere",fontFamily:"inherit",marginBottom:0}}>{JSON.stringify(row.metadata,null,2)}</pre></details></dd></div>}</dl>)}</div>{selected.total_rows > 30 && <p>Showing 30 of {selected.total_rows} rows. Approval applies to the full submission.</p>}</>}
         <label>Review note<textarea value={feedback} onChange={event => setFeedback(event.target.value)} maxLength={1000} placeholder="Required when returning or rejecting"/></label>
         {error && <p className="form-error" role="alert">{error}</p>}
         <footer className="confirmation-actions">
