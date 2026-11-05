@@ -80,6 +80,14 @@ Dataset grants are independent of roles and may be `read_only` or `read_write`. 
 
    Open [http://localhost:3000](http://localhost:3000).
 
+   To run the web app in Docker instead, start the local Supabase stack first, then run:
+
+   ```bash
+   docker compose --env-file .env.local up --build -d
+   ```
+
+   Open [http://localhost:3000](http://localhost:3000). Stop the app container with `docker compose --env-file .env.local down`; its private request attachments remain in the `private-uploads` Docker volume.
+
 Local database migrations are applied when the Supabase stack is initialized. To recreate the local database from migrations, use `npm run db:reset`; it removes local database data.
 
 ## Local network deployment on this Windows PC

@@ -1,0 +1,14 @@
+.git
+.next
+node_modules
+.env*
+!.env.example
+*.log
+*.tsbuildinfo
+coverage
+dist
+out
+.vercel
+.turbo
+.private-uploads
+supabase/.temp

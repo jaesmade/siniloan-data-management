@@ -149,12 +149,13 @@ function AppShell({ screen, setScreen, openApprovals, profile, role, selectedDat
     // Dataset IDs are stable for this session; load the routing map once.
     if (role === "DPO") {
       void supabase.schema("core").from("datasets").select("id, slug")
-        .abortSignal(controller.signal).then(({ data }) => {
+        .abortSignal(controller.signal).then(({ data }: { data: unknown }) => {
           if (controller.signal.aborted) return;
           const keys: Record<string, DatabaseKey> = {
             jobseeker_registry: "jobseekers", research_requests: "research", biometric_events: "biometrics",
           };
-          setDatasetRoutes(Object.fromEntries((data ?? []).filter(item => keys[item.slug]).map(item => [item.id, keys[item.slug]])));
+          const datasets = (data ?? []) as { id: string; slug: string }[];
+          setDatasetRoutes(Object.fromEntries(datasets.filter(item => keys[item.slug]).map(item => [item.id, keys[item.slug]])));
         });
     }
     const onVisibilityChange = () => { if (!document.hidden) void load(); };

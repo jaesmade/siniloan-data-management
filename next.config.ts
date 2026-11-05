@@ -5,13 +5,14 @@ const supabaseOrigin = (() => {
   try { return new URL(supabaseUrl).origin; }
   catch { return "http://127.0.0.1:54321"; }
 })();
-const localSupabase = ["localhost", "127.0.0.1", "::1"].includes(new URL(supabaseOrigin).hostname);
+const localSupabase = ["localhost", "127.0.0.1", "::1", "host.docker.internal"].includes(new URL(supabaseOrigin).hostname);
 const supabaseSocketOrigin = supabaseOrigin.replace(/^http/, "ws");
 const localSupabaseOrigins = "http://127.0.0.1:54321 http://localhost:54321 ws://127.0.0.1:54321 ws://localhost:54321";
 const scriptPolicy = process.env.NODE_ENV === "development" ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'";
 const transportPolicy = process.env.NODE_ENV === "production" && !localSupabase ? "; upgrade-insecure-requests" : "";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   reactStrictMode: true,
   experimental: { optimizePackageImports: ["@phosphor-icons/react"] },
   allowedDevOrigins: ["192.168.68.105", "192.168.1.101"],
